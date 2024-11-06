@@ -12,6 +12,19 @@
 #
 # 14.1 cycles per byte on U74 for aligned input, ~70% faster than
 # compiler-generated code. Misaligned input is processed in 16.4 cpb.
+# C910 processes one byte in 13.7 cycles. JH7110 (U74+zbb) - in 10.3.
+# Spacemit X60 - in 8.6.
+#
+# October 2023.
+#
+# Add a "teaser" vector implementation. It's a "teaser," because one
+# can improve it further for longer inputs. But it makes no sense to
+# invest time prior vector-capable hardware appears, so that one can
+# make suitable choices. For now it's just a qemu exercise...
+#
+# June 2024.
+#
+# Add CHERI support.
 #
 ######################################################################
 #
@@ -20,25 +33,9 @@
 ($s0,$s1,$s2,$s3,$s4,$s5,$s6,$s7,$s8,$s9,$s10,$s11)=map("x$_",(8,9,18..27));
 ($t0,$t1,$t2,$t3,$t4,$t5,$t6)=map("x$_",(5..7, 28..31));
 #
-$flavour = shift || "64";
-
-if ($flavour =~ /64/) {
-	$REG_S="sd";
-	$REG_L="ld";
-	$SRL="srlw";
-	$SZREG=8;
-} else {
-	$REG_S="sw";
-	$REG_L="lw";
-	$PTR_SLL="sll";
-	$SRL="srl";
-	$SZREG=4;
-}
-
-$FRAMESIZE=64+16*$SZREG;
-$SAVED_REGS_MASK = ($flavour =~ /nubi/i) ? "0xc0fff008" : "0xc0ff0000";
-#
 ######################################################################
+
+$flavour = shift;	# "cheri" is the only meaningful option
 
 my @x = map("x$_",(16..31));
 my @y = map("x$_",(5..9,13,14));
@@ -60,10 +57,16 @@ $code.=<<___;
 	 xor		@x[$d1],@x[$d1],@x[$a1]
 	  xor		@x[$d2],@x[$d2],@x[$a2]
 	   xor		@x[$d3],@x[$d3],@x[$a3]
-	$SRL		@y[0],@x[$d0],16
-	 $SRL		@y[1],@x[$d1],16
-	  $SRL		@y[2],@x[$d2],16
-	   $SRL		@y[3],@x[$d3],16
+#ifdef	__riscv_zbb
+	rorw		@x[$d0],@x[$d0],16
+	 rorw		@x[$d1],@x[$d1],16
+	  rorw		@x[$d2],@x[$d2],16
+	   rorw		@x[$d3],@x[$d3],16
+#else
+	srlw		@y[0],@x[$d0],16
+	 srlw		@y[1],@x[$d1],16
+	  srlw		@y[2],@x[$d2],16
+	   srlw		@y[3],@x[$d3],16
 	sll		@x[$d0],@x[$d0],16
 	 sll		@x[$d1],@x[$d1],16
 	  sll		@x[$d2],@x[$d2],16
@@ -72,6 +75,7 @@ $code.=<<___;
 	 or		@x[$d1],@x[$d1],@y[1]
 	  or		@x[$d2],@x[$d2],@y[2]
 	   or		@x[$d3],@x[$d3],@y[3]
+#endif
 
 	add		@x[$c0],@x[$c0],@x[$d0]
 	 add		@x[$c1],@x[$c1],@x[$d1]
@@ -81,10 +85,16 @@ $code.=<<___;
 	 xor		@x[$b1],@x[$b1],@x[$c1]
 	  xor		@x[$b2],@x[$b2],@x[$c2]
 	   xor		@x[$b3],@x[$b3],@x[$c3]
-	$SRL		@y[0],@x[$b0],20
-	 $SRL		@y[1],@x[$b1],20
-	  $SRL		@y[2],@x[$b2],20
-	   $SRL		@y[3],@x[$b3],20
+#ifdef	__riscv_zbb
+	rorw		@x[$b0],@x[$b0],20
+	 rorw		@x[$b1],@x[$b1],20
+	  rorw		@x[$b2],@x[$b2],20
+	   rorw		@x[$b3],@x[$b3],20
+#else
+	srlw		@y[0],@x[$b0],20
+	 srlw		@y[1],@x[$b1],20
+	  srlw		@y[2],@x[$b2],20
+	   srlw		@y[3],@x[$b3],20
 	sll		@x[$b0],@x[$b0],12
 	 sll		@x[$b1],@x[$b1],12
 	  sll		@x[$b2],@x[$b2],12
@@ -93,6 +103,7 @@ $code.=<<___;
 	 or		@x[$b1],@x[$b1],@y[1]
 	  or		@x[$b2],@x[$b2],@y[2]
 	   or		@x[$b3],@x[$b3],@y[3]
+#endif
 
 	add		@x[$a0],@x[$a0],@x[$b0]
 	 add		@x[$a1],@x[$a1],@x[$b1]
@@ -102,10 +113,16 @@ $code.=<<___;
 	 xor		@x[$d1],@x[$d1],@x[$a1]
 	  xor		@x[$d2],@x[$d2],@x[$a2]
 	   xor		@x[$d3],@x[$d3],@x[$a3]
-	$SRL		@y[0],@x[$d0],24
-	 $SRL		@y[1],@x[$d1],24
-	  $SRL		@y[2],@x[$d2],24
-	   $SRL		@y[3],@x[$d3],24
+#ifdef	__riscv_zbb
+	rorw		@x[$d0],@x[$d0],24
+	 rorw		@x[$d1],@x[$d1],24
+	  rorw		@x[$d2],@x[$d2],24
+	   rorw		@x[$d3],@x[$d3],24
+#else
+	srlw		@y[0],@x[$d0],24
+	 srlw		@y[1],@x[$d1],24
+	  srlw		@y[2],@x[$d2],24
+	   srlw		@y[3],@x[$d3],24
 	sll		@x[$d0],@x[$d0],8
 	 sll		@x[$d1],@x[$d1],8
 	  sll		@x[$d2],@x[$d2],8
@@ -114,6 +131,7 @@ $code.=<<___;
 	 or		@x[$d1],@x[$d1],@y[1]
 	  or		@x[$d2],@x[$d2],@y[2]
 	   or		@x[$d3],@x[$d3],@y[3]
+#endif
 
 	add		@x[$c0],@x[$c0],@x[$d0]
 	 add		@x[$c1],@x[$c1],@x[$d1]
@@ -123,10 +141,16 @@ $code.=<<___;
 	 xor		@x[$b1],@x[$b1],@x[$c1]
 	  xor		@x[$b2],@x[$b2],@x[$c2]
 	   xor		@x[$b3],@x[$b3],@x[$c3]
-	$SRL		@y[0],@x[$b0],25
-	 $SRL		@y[1],@x[$b1],25
-	  $SRL		@y[2],@x[$b2],25
-	   $SRL		@y[3],@x[$b3],25
+#ifdef	__riscv_zbb
+	rorw		@x[$b0],@x[$b0],25
+	 rorw		@x[$b1],@x[$b1],25
+	  rorw		@x[$b2],@x[$b2],25
+	   rorw		@x[$b3],@x[$b3],25
+#else
+	srlw		@y[0],@x[$b0],25
+	 srlw		@y[1],@x[$b1],25
+	  srlw		@y[2],@x[$b2],25
+	   srlw		@y[3],@x[$b3],25
 	sll		@x[$b0],@x[$b0],7
 	 sll		@x[$b1],@x[$b1],7
 	  sll		@x[$b2],@x[$b2],7
@@ -135,11 +159,36 @@ $code.=<<___;
 	 or		@x[$b1],@x[$b1],@y[1]
 	  or		@x[$b2],@x[$b2],@y[2]
 	   or		@x[$b3],@x[$b3],@y[3]
+#endif
 ___
 }
 
 $code.=<<___;
+#if __riscv_xlen == 32
+# if __SIZEOF_POINTER__ == 8
+#  define PUSH	csc
+#  define POP	clc
+# else
+#  define PUSH	sw
+#  define POP	lw
+# endif
+# define srlw	srl
+# define rorw	ror
+#elif __riscv_xlen == 64
+# if __SIZEOF_POINTER__ == 16
+#  define PUSH	csc
+#  define POP	clc
+# else
+#  define PUSH	sd
+#  define POP	ld
+# endif
+#else
+# error "unsupported __riscv_xlen"
+#endif
+#define FRAMESIZE		(64+16*__SIZEOF_POINTER__)
+
 .text
+.option	pic
 
 .type	__ChaCha,\@function
 __ChaCha:
@@ -199,26 +248,26 @@ $code.=<<___;
 	add		@x[13],@x[13],@y[1]
 	add		@x[14],@x[14],@y[2]
 	add		@x[15],@x[15],@y[3]
-	jr		$ra
+	ret
 .size	__ChaCha,.-__ChaCha
 
 .globl	ChaCha20_ctr32
 .type	ChaCha20_ctr32,\@function
 ChaCha20_ctr32:
-	addi		$sp,$sp,-$FRAMESIZE
-	$REG_S		$ra, ($FRAMESIZE-1*$SZREG)($sp)
-	$REG_S		$s0, ($FRAMESIZE-2*$SZREG)($sp)
-	$REG_S		$s1, ($FRAMESIZE-3*$SZREG)($sp)
-	$REG_S		$s2, ($FRAMESIZE-4*$SZREG)($sp)
-	$REG_S		$s3, ($FRAMESIZE-5*$SZREG)($sp)
-	$REG_S		$s4, ($FRAMESIZE-6*$SZREG)($sp)
-	$REG_S		$s5, ($FRAMESIZE-7*$SZREG)($sp)
-	$REG_S		$s6, ($FRAMESIZE-8*$SZREG)($sp)
-	$REG_S		$s7, ($FRAMESIZE-9*$SZREG)($sp)
-	$REG_S		$s8, ($FRAMESIZE-10*$SZREG)($sp)
-	$REG_S		$s9, ($FRAMESIZE-11*$SZREG)($sp)
-	$REG_S		$s10,($FRAMESIZE-12*$SZREG)($sp)
-	$REG_S		$s11,($FRAMESIZE-13*$SZREG)($sp)
+	caddi		$sp,$sp,-FRAMESIZE
+	PUSH		$ra, (FRAMESIZE-1*__SIZEOF_POINTER__)($sp)
+	PUSH		$s0, (FRAMESIZE-2*__SIZEOF_POINTER__)($sp)
+	PUSH		$s1, (FRAMESIZE-3*__SIZEOF_POINTER__)($sp)
+	PUSH		$s2, (FRAMESIZE-4*__SIZEOF_POINTER__)($sp)
+	PUSH		$s3, (FRAMESIZE-5*__SIZEOF_POINTER__)($sp)
+	PUSH		$s4, (FRAMESIZE-6*__SIZEOF_POINTER__)($sp)
+	PUSH		$s5, (FRAMESIZE-7*__SIZEOF_POINTER__)($sp)
+	PUSH		$s6, (FRAMESIZE-8*__SIZEOF_POINTER__)($sp)
+	PUSH		$s7, (FRAMESIZE-9*__SIZEOF_POINTER__)($sp)
+	PUSH		$s8, (FRAMESIZE-10*__SIZEOF_POINTER__)($sp)
+	PUSH		$s9, (FRAMESIZE-11*__SIZEOF_POINTER__)($sp)
+	PUSH		$s10,(FRAMESIZE-12*__SIZEOF_POINTER__)($sp)
+	PUSH		$s11,(FRAMESIZE-13*__SIZEOF_POINTER__)($sp)
 
 	lui		@x[0],0x61707+1		# compose sigma
 	lui		@x[1],0x33206
@@ -310,9 +359,9 @@ $code.=<<___;
 	sb		@y[4],61($out)
 	addi		$len,$len,-64
 	sb		@y[5],62($out)
-	addi		$inp,$inp,64
+	caddi		$inp,$inp,64
 	sb		@y[6],63($out)
-	addi		$out,$out,64
+	caddi		$out,$out,64
 	beqz		$len,.Ldone
 
 	sltiu		@y[4],$len,64
@@ -357,9 +406,9 @@ $code.=<<___;
 	sw		@x[13],52($out)
 	addi		$len,$len,-64
 	sw		@x[14],56($out)
-	addi		$inp,$inp,64
+	caddi		$inp,$inp,64
 	sw		@x[15],60($out)
-	addi		$out,$out,64
+	caddi		$out,$out,64
 	sltiu		@y[4],$len,64
 	beqz		$len,.Ldone
 
@@ -369,7 +418,7 @@ $code.=<<___;
 	beqz		@y[4],.Loop_aligned
 
 .Ltail:
-	mv		$ra,$sp
+	cmove		$ra,$sp
 	sw		@x[1], 4*1($sp)
 	sw		@x[2], 4*2($sp)
 	sw		@x[3], 4*3($sp)
@@ -390,13 +439,13 @@ $code.=<<___;
 	sltiu		$at,$len,4
 	bnez		$at,.Last_word
 
-	addi		$ra,$ra,4
+	caddi		$ra,$ra,4
 	lb		@y[0],0($inp)
 	lb		@y[1],1($inp)
 	lb		@y[2],2($inp)
 	addi		$len,$len,-4
 	lb		@y[3],3($inp)
-	addi		$inp,$inp,4
+	caddi		$inp,$inp,4
 	xor		@y[0],@y[0],@x[0]
 	srl		@x[0],@x[0],8
 	xor		@y[1],@y[1],@x[0]
@@ -409,38 +458,214 @@ $code.=<<___;
 	sb		@y[1],1($out)
 	sb		@y[2],2($out)
 	sb		@y[3],3($out)
-	addi		$out,$out,4
+	caddi		$out,$out,4
 	j		.Loop_tail
 
 .Last_word:
 	beqz		$len,.Ldone
 	addi		$len,$len,-1
 	lb		@y[0],0($inp)
-	addi		$inp,$inp,1
+	caddi		$inp,$inp,1
 	xor		@y[0],@y[0],@x[0]
 	srl		@x[0],@x[0],8
 	sb		@y[0],0($out)
-	addi		$out,$out,1
+	caddi		$out,$out,1
 	j		.Last_word
 
 .Ldone:
-	$REG_L		$ra, ($FRAMESIZE-1*$SZREG)($sp)
-	$REG_L		$s0, ($FRAMESIZE-2*$SZREG)($sp)
-	$REG_L		$s1, ($FRAMESIZE-3*$SZREG)($sp)
-	$REG_L		$s2, ($FRAMESIZE-4*$SZREG)($sp)
-	$REG_L		$s3, ($FRAMESIZE-5*$SZREG)($sp)
-	$REG_L		$s4, ($FRAMESIZE-6*$SZREG)($sp)
-	$REG_L		$s5, ($FRAMESIZE-7*$SZREG)($sp)
-	$REG_L		$s6, ($FRAMESIZE-8*$SZREG)($sp)
-	$REG_L		$s7, ($FRAMESIZE-9*$SZREG)($sp)
-	$REG_L		$s8, ($FRAMESIZE-10*$SZREG)($sp)
-	$REG_L		$s9, ($FRAMESIZE-11*$SZREG)($sp)
-	$REG_L		$s10,($FRAMESIZE-12*$SZREG)($sp)
-	$REG_L		$s11,($FRAMESIZE-13*$SZREG)($sp)
-	addi		$sp,$sp,$FRAMESIZE
+	POP		$ra, (FRAMESIZE-1*__SIZEOF_POINTER__)($sp)
+	POP		$s0, (FRAMESIZE-2*__SIZEOF_POINTER__)($sp)
+	POP		$s1, (FRAMESIZE-3*__SIZEOF_POINTER__)($sp)
+	POP		$s2, (FRAMESIZE-4*__SIZEOF_POINTER__)($sp)
+	POP		$s3, (FRAMESIZE-5*__SIZEOF_POINTER__)($sp)
+	POP		$s4, (FRAMESIZE-6*__SIZEOF_POINTER__)($sp)
+	POP		$s5, (FRAMESIZE-7*__SIZEOF_POINTER__)($sp)
+	POP		$s6, (FRAMESIZE-8*__SIZEOF_POINTER__)($sp)
+	POP		$s7, (FRAMESIZE-9*__SIZEOF_POINTER__)($sp)
+	POP		$s8, (FRAMESIZE-10*__SIZEOF_POINTER__)($sp)
+	POP		$s9, (FRAMESIZE-11*__SIZEOF_POINTER__)($sp)
+	POP		$s10,(FRAMESIZE-12*__SIZEOF_POINTER__)($sp)
+	POP		$s11,(FRAMESIZE-13*__SIZEOF_POINTER__)($sp)
+	caddi		$sp,$sp,FRAMESIZE
 	ret
 .size	ChaCha20_ctr32,.-ChaCha20_ctr32
 ___
 
-print $code;
+sub HROUND {
+my ($a, $b, $c, $d, $t) = @_;
+
+$code.=<<___
+	vadd.vv		$a, $a, $b	# a += b
+	vxor.vv		$d, $d, $a	# d ^= a
+	vsrl.vi		$t, $d, 16
+	vsll.vi		$d, $d, 16
+	vor.vv		$d, $d, $t	# d >>>= 16
+
+	vadd.vv		$c, $c, $d	# c += d
+	vxor.vv		$b, $b, $c	# b ^= c
+	vsrl.vi		$t, $b, 20
+	vsll.vi		$b, $b, 12
+	vor.vv		$b, $b, $t	# b >>>= 20
+
+	vadd.vv		$a, $a, $b	# a += b
+	vxor.vv		$d, $d, $a	# d ^= a
+	vsrl.vi		$t, $d, 24
+	vsll.vi		$d, $d, 8
+	vor.vv		$d, $d, $t	# d >>>= 24
+
+	vadd.vv		$c, $c, $d	# c += d
+	vxor.vv		$b, $b, $c	# b ^= c
+	vsrl.vi		$t, $b, 25
+	vsll.vi		$b, $b, 7
+	vor.vv		$b, $b, $t	# b >>>= 25
+___
+}
+
+$code.=<<___;
+#if defined(__riscv_v) && __riscv_v >= 1000000
+.globl	ChaCha20_ctr32_v
+.type	ChaCha20_ctr32_v,\@function
+ChaCha20_ctr32_v:
+	cllc		$t0, sigma
+	vsetivli	$zero, 4, e32
+
+	vle32.v		v8, ($t0)	# a'
+	caddi		$t1, $key, 16
+	vle32.v		v9, ($key)	# b'
+	vle32.v		v10, ($t1)	# c'
+	vle32.v		v11, ($counter)	# d'
+
+	caddi		$t1, $t0, 16
+	caddi		$t2, $t0, 32
+	caddi		$t3, $t0, 48
+	vle32.v		v12, ($t1)
+	vle32.v		v13, ($t2)
+	vle32.v		v14, ($t3)
+	vmv.x.s		$counter, v11	# put aside the 32-bit counter value
+	li		$t0, 64
+	j		.Loop_enter_v
+
+.Loop_outer_v:
+	addi		$counter, $counter, 1
+	vsetivli	zero, 4, e32
+	vmv.s.x		v11, $counter	# d'
+.Loop_enter_v:
+	vmv.v.v		v0, v8		# a = a'
+	vmv.v.v		v1, v9		# b = b'
+	vmv.v.v		v2, v10		# c = c'
+	vmv.v.v		v3, v11		# d = d'
+	li		$a5, 10
+.Loop_v:
+___
+	&HROUND(map("v$_", (0..3,4)));
+$code.=<<___;
+	vrgather.vv	v6, v3, v14	# d >>>= 96
+	vrgather.vv	v4, v1, v12	# b >>>= 32
+	vrgather.vv	v5, v2, v13	# c >>>= 64
+___
+	&HROUND(map("v$_", (0,4..6,1)));
+$code.=<<___;
+	vrgather.vv	v3, v6, v12	# d >>>= 32
+	vrgather.vv	v1, v4, v14	# b >>>= 96
+	vrgather.vv	v2, v5, v13	# c >>>= 64
+
+	addi		$a5, $a5, -1
+	bnez		$a5, .Loop_v
+
+	vadd.vv		v0, v0, v8	# a += a'
+	vadd.vv		v1, v1, v9	# b += b'
+	vadd.vv		v2, v2, v10	# c += c'
+	vadd.vv		v3, v3, v11	# d += d'
+
+	vsetivli	zero, 16, e8
+	bltu		$len, $t0, .Ltail_v
+
+	caddi		$t1, $inp, 16
+	caddi		$t2, $inp, 32
+	caddi		$t3, $inp, 48
+	vle8.v		v4, ($inp)
+	caddi		$inp, $inp, 64
+	addi		$len, $len, -64
+	vle8.v		v5, ($t1)
+	caddi		$t1, $out, 16
+	vle8.v		v6, ($t2)
+	caddi		$t2, $out, 32
+	vle8.v		v7, ($t3)
+	caddi		$t3, $out, 48
+	vxor.vv		v4, v4, v0
+	vxor.vv		v5, v5, v1
+	vxor.vv		v6, v6, v2
+	vxor.vv		v7, v7, v3
+	vse8.v		v4, ($out)
+	caddi		$out, $out, 64
+	vse8.v		v5, ($t1)
+	vse8.v		v6, ($t2)
+	vse8.v		v7, ($t3)
+	bnez		$len, .Loop_outer_v
+
+	ret
+
+.Ltail_v:
+	li		$t0, 16
+	bleu		$len, $t0, .Last_v
+
+	vle8.v		v4, ($inp)
+	caddi		$inp, $inp, 16
+	addi		$len, $len, -16
+	vxor.vv		v4, v4, v0
+	vmv.v.v		v0, v1
+	vse8.v		v4, ($out)
+	caddi		$out, $out, 16
+	bleu		$len, $t0, .Last_v
+
+	vle8.v		v5, ($inp)
+	caddi		$inp, $inp, 16
+	addi		$len, $len, -16
+	vxor.vv		v5, v5, v1
+	vmv.v.v		v0, v2
+	vse8.v		v5, ($out)
+	caddi		$out, $out, 16
+	bleu		$len, $t0, .Last_v
+
+	vle8.v		v6, ($inp)
+	caddi		$inp, $inp, 16
+	addi		$len, $len, -16
+	vxor.vv		v6, v6, v2
+	vmv.v.v		v0, v3
+	vse8.v		v6, ($out)
+	caddi		$out, $out, 16
+
+.Last_v:
+	vsetvli		zero, $len, e8
+	vle8.v		v4, ($inp)
+	vxor.vv		v4, v4, v0
+	vse8.v		v4, ($out)
+
+	ret
+.size	ChaCha20_ctr32_v,.-ChaCha20_ctr32_v
+#endif
+
+.section	.rodata
+.align	4
+sigma:
+.word	0x61707865, 0x3320646e, 0x79622d32, 0x6b206574
+.word	1,2,3,0,    2,3,0,1,    3,0,1,2,    0,0,0,0
+.string	"ChaCha20 for RISC-V, CRYPTOGAMS by \@dot-asm"
+___
+
+foreach (split("\n", $code)) {
+    if ($flavour =~ "cheri") {
+	s/\(x([0-9]+)\)/(c$1)/ and s/\b([ls][bhwd]u?)\b/c$1/;
+	s/\b(PUSH|POP|cllc)(\s+)x([0-9]+)/$1$2c$3/ or
+	s/\b(ret|jal)\b/c$1/;
+	s/\bcaddi?\b/cincoffset/ and s/\bx([0-9]+,)/c$1/g or
+	m/\bcmove\b/ and s/\bx([0-9]+)/c$1/g;
+    } else {
+	s/\bcaddi?\b/add/ or
+	s/\bcllc\b/lla/ or
+	s/\bcmove\b/mv/;
+    }
+    print $_, "\n";
+}
+
 close STDOUT;
