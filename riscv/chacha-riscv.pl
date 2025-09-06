@@ -590,7 +590,7 @@ ChaCha20_ctr32_v:
 	vle32.v		v6, ($counter)	# d'
 
 	li		$vlenw, $MAX_WORDS
-	li		$vtype, 0x11	# e32, m2
+	li		$vtype, 0x51	# e32, m2, ta, mu
 #if 1
 	vsetvli		$a5, $vlenw, e32, m2
 
@@ -611,7 +611,7 @@ ChaCha20_ctr32_v:
 	sub		$vtype, $vtype, $a7
 
 	andi		$vtype, $vtype, 7
-	ori		$vtype, $vtype, 0x10
+	ori		$vtype, $vtype, 0x50
 #endif
 	vsetvl		$vlenw, $vlenw, $vtype
 
@@ -1001,7 +1001,7 @@ ChaCha20_ctr32_vx:
 	vsetvli		$vlenw, $vlenw, e32	# get actual vlen [in words]
 	sll		$t0, $vlenw, 2+4	# vlen in bytes times 16
 
-	li		$vtype, 0x10		# e32, m1
+	li		$vtype, 0x50		# e32, m1, ta, mu
 	sltiu		$t1, $vlenw, 8
 	sltiu		$t2, $vlenw, 16
 	add		$vtype, $vtype, $t1	# adjust lmul to accommodate 64 bytes
@@ -1168,6 +1168,10 @@ foreach (split("\n", $code)) {
 	s/\bcaddi?\b/add/ or
 	s/\bcllc\b/lla/ or
 	s/\bcmove\b/mv/;
+    }
+    if (m/\bvseti*vli/) {
+        s/(\be[1-8]+\b(?!,))/$1, m1, ta, mu/ or
+        s/(\bmf*[1-8]\b(?!,))/$1, ta, mu/;
     }
     print $_, "\n";
 }

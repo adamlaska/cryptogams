@@ -1681,6 +1681,10 @@ foreach (split("\n", $code)) {
 	s/\bcaddi?\b/add/ or
 	s/\bcmove\b/mv/;
     }
+    if (m/\bvseti*vli/) {
+        s/(\be[1-8]+\b(?!,))/$1, m1, ta, mu/ or
+        s/(\bmf*[1-8]\b(?!,))/$1, ta, mu/;
+    }
     print $_, "\n";
 }
 
